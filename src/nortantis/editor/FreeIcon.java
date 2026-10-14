@@ -172,6 +172,16 @@ public class FreeIcon
 				originalScale);
 	}
 
+	/**
+	 * Returns a copy at the given location whose center anchor is replaced. Used when an icon is moved along with the ground it stands on, so
+	 * that the anchor keeps naming the cell the icon is actually on.
+	 */
+	public FreeIcon copyWithLocationResolutionInvariantAndCenterIndex(Point locationResolutionInvariant, Integer centerIndex)
+	{
+		return new FreeIcon(locationResolutionInvariant, scale, type, artPack, groupId, iconIndex, iconName, centerIndex, density, fillColor, filterColor, maximizeOpacity, fillWithColor,
+				originalScale);
+	}
+
 	public FreeIcon copyWithColors(Color fillColor, HSBColor filterColor, boolean maximizeOpacity, boolean fillWithColor)
 	{
 		return new FreeIcon(locationResolutionInvariant, scale, type, artPack, groupId, iconIndex, iconName, centerIndex, density, fillColor, filterColor, maximizeOpacity, fillWithColor,
