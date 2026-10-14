@@ -48,7 +48,7 @@ public class ToolsPanel extends JPanel
 
 		// Setup tools
 		tools = Arrays.asList(new LandWaterTool(mainWindow, this, updater), new IconsTool(mainWindow, this, updater), new TextTool(mainWindow, this, updater),
-				new OverlayTool(mainWindow, null, updater));
+				new LassoSelectionTool(mainWindow, this, updater), new OverlayTool(mainWindow, null, updater));
 		currentTool = tools.get(0);
 
 		setPreferredSize(new Dimension(SwingHelper.sidePanelMinimumWidth, mainWindow.getContentPane().getHeight()));

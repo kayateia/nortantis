@@ -39,8 +39,26 @@ public class MapEditingPanel extends UnscaledImagePanel
 	private final Color artPackHighlightColor = Color.CYAN;
 	private final Color processingColor = Color.orange;
 	private final Color selectColor = Color.orange;
+	// The lasso outline is drawn in a color no other overlay uses so the path the user is dragging is never mistaken for a
+	// hover highlight (orange) or a selection (yellow).
+	private final Color lassoPathColor = new Color(191, 0, 255);
+	// Translucent fills for the lasso tool's drop preview, one per terrain type, so the user can see what a moved selection
+	// will turn into before dropping it.
+	private final Color ghostLandColor = new Color(60, 200, 90, 120);
+	private final Color ghostWaterColor = new Color(40, 120, 255, 120);
+	private final Color ghostLakeColor = new Color(60, 220, 230, 120);
 	private Set<Center> highlightedCenters;
 	private Set<Center> selectedCenters;
+	private List<Point> lassoPath;
+	private Set<Center> lassoCenters;
+	private Set<nortantis.geom.Rectangle> lassoIconBounds;
+	private Set<RotatedRectangle> lassoTextBounds;
+	private List<List<Point>> lassoPolylines;
+	private List<List<Point>> lassoPreviewPolylines;
+	private Set<Center> lassoPreviewLandCenters;
+	private Set<Center> lassoPreviewOceanCenters;
+	private Set<Center> lassoPreviewLakeCenters;
+	private boolean lassoPreviewActive;
 	private WorldGraph graph;
 	private List<nortantis.editor.River> rivers;
 	private MapSettings.LineStyle lineStyle;
@@ -131,6 +149,14 @@ public class MapEditingPanel extends UnscaledImagePanel
 		super(image);
 		highlightedCenters = new HashSet<>();
 		selectedCenters = new HashSet<>();
+		lassoCenters = new HashSet<>();
+		lassoIconBounds = new HashSet<>();
+		lassoTextBounds = new HashSet<>();
+		lassoPolylines = new ArrayList<>();
+		lassoPreviewPolylines = new ArrayList<>();
+		lassoPreviewLandCenters = new HashSet<>();
+		lassoPreviewOceanCenters = new HashSet<>();
+		lassoPreviewLakeCenters = new HashSet<>();
 		highlightedEdges = new HashSet<>();
 		highlightedAreas = new HashSet<>();
 		redHighlightedAreas = new HashSet<>();
@@ -706,6 +732,8 @@ public class MapEditingPanel extends UnscaledImagePanel
 
 		drawAreas(g);
 
+		drawLassoOverlay((Graphics2D) g);
+
 		if (graph != null)
 		{
 			if (highlightLakes)
@@ -1016,11 +1044,16 @@ public class MapEditingPanel extends UnscaledImagePanel
 
 	private void drawCenterOutlines(Graphics g, Set<Center> centers)
 	{
+		drawCenterOutlines(g, centers, highlightMode);
+	}
+
+	private void drawCenterOutlines(Graphics g, Set<Center> centers, HighlightMode mode)
+	{
 		for (Center c : centers)
 		{
 			for (Edge e : c.borders)
 			{
-				if (highlightMode == HighlightMode.outlineGroup)
+				if (mode == HighlightMode.outlineGroup)
 				{
 					if (e.d0 != null && e.d1 != null && centers.contains(e.d0) && centers.contains(e.d1))
 					{
@@ -1031,6 +1064,174 @@ public class MapEditingPanel extends UnscaledImagePanel
 				graph.drawEdge(AwtFactory.wrap((Graphics2D) g), e);
 			}
 		}
+	}
+
+	/**
+	 * Sets the outline drawn while the user drags a lasso, in graph coordinates. Pass null or an empty list to clear it.
+	 */
+	public void setLassoPath(List<Point> path)
+	{
+		lassoPath = path == null || path.isEmpty() ? null : new ArrayList<>(path);
+	}
+
+	public void clearLassoPath()
+	{
+		lassoPath = null;
+	}
+
+	/**
+	 * Replaces the lasso tool's selection overlay: the selected cells drawn as a single group outline, plus an outline box around each
+	 * selected icon and text, plus the selected roads' and rivers' paths. Icon bounds are the icons' content bounds, text bounds the rotated
+	 * boxes the text drawer stamped, and polylines the roads' and rivers' control-point paths, all in graph coordinates.
+	 */
+	public void setLassoSelection(Collection<Center> centers, Collection<nortantis.geom.Rectangle> iconBounds, Collection<RotatedRectangle> textBounds,
+			Collection<List<Point>> polylines)
+	{
+		lassoPreviewActive = false;
+		lassoCenters = centers == null ? new HashSet<>() : new HashSet<>(centers);
+		lassoIconBounds = iconBounds == null ? new HashSet<>() : new HashSet<>(iconBounds);
+		lassoTextBounds = textBounds == null ? new HashSet<>() : new HashSet<>(textBounds);
+		lassoPolylines = polylines == null ? new ArrayList<>() : new ArrayList<>(polylines);
+		lassoPreviewPolylines.clear();
+		lassoPreviewLandCenters.clear();
+		lassoPreviewOceanCenters.clear();
+		lassoPreviewLakeCenters.clear();
+	}
+
+	/**
+	 * Replaces the lasso tool's drop preview: the cells the dragged selection would move onto, filled with a translucent color by terrain
+	 * type, plus an outline box at each moved icon's and text's destination and the path each moved road and river would take. See
+	 * {@link #setLassoSelection} for the coordinate space.
+	 */
+	public void setLassoPreview(Collection<Center> landCenters, Collection<Center> oceanCenters, Collection<Center> lakeCenters, Collection<nortantis.geom.Rectangle> iconBounds,
+			Collection<RotatedRectangle> textBounds, Collection<List<Point>> polylines)
+	{
+		lassoPreviewActive = true;
+		lassoCenters.clear();
+		lassoPreviewLandCenters = landCenters == null ? new HashSet<>() : new HashSet<>(landCenters);
+		lassoPreviewOceanCenters = oceanCenters == null ? new HashSet<>() : new HashSet<>(oceanCenters);
+		lassoPreviewLakeCenters = lakeCenters == null ? new HashSet<>() : new HashSet<>(lakeCenters);
+		lassoIconBounds = iconBounds == null ? new HashSet<>() : new HashSet<>(iconBounds);
+		lassoTextBounds = textBounds == null ? new HashSet<>() : new HashSet<>(textBounds);
+		lassoPolylines = new ArrayList<>();
+		lassoPreviewPolylines = polylines == null ? new ArrayList<>() : new ArrayList<>(polylines);
+	}
+
+	/** Clears everything the lasso tool draws: its path, selection overlay, and drop preview. */
+	public void clearLassoOverlays()
+	{
+		lassoPath = null;
+		lassoPreviewActive = false;
+		lassoCenters.clear();
+		lassoIconBounds.clear();
+		lassoTextBounds.clear();
+		lassoPolylines.clear();
+		lassoPreviewPolylines.clear();
+		lassoPreviewLandCenters.clear();
+		lassoPreviewOceanCenters.clear();
+		lassoPreviewLakeCenters.clear();
+	}
+
+	private void drawLassoOverlay(Graphics2D g)
+	{
+		if (graph != null)
+		{
+			if (lassoPreviewActive)
+			{
+				drawGhostCenters(g, lassoPreviewLandCenters, ghostLandColor);
+				drawGhostCenters(g, lassoPreviewOceanCenters, ghostWaterColor);
+				drawGhostCenters(g, lassoPreviewLakeCenters, ghostLakeColor);
+
+				// Trace the outline of the previewed land: that boundary is the coastline the drop will produce, and without it the new land
+				// reads as a wash of translucent color with the old coastline still showing through. When the selection is water only there is
+				// no new coastline, so the water's own boundary is drawn instead.
+				Set<Center> outlineCenters = lassoPreviewLandCenters.isEmpty() ? allPreviewedCenters() : lassoPreviewLandCenters;
+				if (!outlineCenters.isEmpty())
+				{
+					Stroke previousStroke = g.getStroke();
+					g.setColor(lassoPathColor);
+					g.setStroke(new BasicStroke((float) Math.max(1.0, resolution)));
+					drawCenterOutlines(g, outlineCenters, HighlightMode.outlineGroup);
+					g.setStroke(previousStroke);
+				}
+			}
+			else if (!lassoCenters.isEmpty())
+			{
+				g.setColor(selectColor);
+				// Only the group's outer boundary, so a large selection reads as one shape instead of a mesh of cell borders.
+				drawCenterOutlines(g, lassoCenters, HighlightMode.outlineGroup);
+			}
+		}
+
+		g.setColor(selectColor);
+		for (nortantis.geom.Rectangle bounds : lassoIconBounds)
+		{
+			g.draw(AwtFactory.toAwtArea(bounds));
+		}
+		for (RotatedRectangle bounds : lassoTextBounds)
+		{
+			g.draw(AwtFactory.toAwtArea(bounds));
+		}
+
+		drawLassoPolylines(g, lassoPolylines, selectColor);
+		if (lassoPreviewActive)
+		{
+			drawLassoPolylines(g, lassoPreviewPolylines, selectColor);
+		}
+
+		if (lassoPath != null && lassoPath.size() >= 2)
+		{
+			Stroke previousStroke = g.getStroke();
+			g.setColor(lassoPathColor);
+			float dash = (float) Math.max(1.0, resolution * 2.0);
+			g.setStroke(new BasicStroke(1.5f * dash, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, new float[] { 6f * dash, 4f * dash }, 0f));
+			drawPolyline(g, lassoPath);
+			g.setStroke(previousStroke);
+		}
+	}
+
+	/**
+	 * Fills the given cells with a translucent color, following their noisy coastline shape rather than the raw Voronoi polygons, so the
+	 * preview matches the silhouette the map will actually draw.
+	 */
+	private void drawGhostCenters(Graphics2D g, Set<Center> centers, Color color)
+	{
+		if (centers.isEmpty())
+		{
+			return;
+		}
+		graph.drawPolygons(AwtFactory.wrap(g), centers, (ignored) -> AwtBridge.fromAwtColor(color));
+	}
+
+	/**
+	 * Draws road and river paths as dashed lines, so a selected or previewed path reads as one continuous object rather than a series of
+	 * control points.
+	 */
+	private void drawLassoPolylines(Graphics2D g, List<List<Point>> polylines, Color color)
+	{
+		if (polylines.isEmpty())
+		{
+			return;
+		}
+		Stroke previousStroke = g.getStroke();
+		g.setColor(color);
+		float dash = (float) Math.max(1.0, resolution);
+		g.setStroke(new BasicStroke(1.5f * dash, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 1f, new float[] { 5f * dash, 3f * dash }, 0f));
+		for (List<Point> polyline : polylines)
+		{
+			if (polyline.size() >= 2)
+			{
+				drawPolyline(g, polyline);
+			}
+		}
+		g.setStroke(previousStroke);
+	}
+
+	private Set<Center> allPreviewedCenters()
+	{
+		Set<Center> all = new HashSet<>(lassoPreviewOceanCenters);
+		all.addAll(lassoPreviewLakeCenters);
+		return all;
 	}
 
 	private void drawEdges(Graphics g, Collection<Edge> edges)
@@ -1914,6 +2115,7 @@ public class MapEditingPanel extends UnscaledImagePanel
 		hideBrush();
 		clearHighlightedAreas();
 		clearProcessingAreas();
+		clearLassoOverlays();
 		repaint();
 	}
 

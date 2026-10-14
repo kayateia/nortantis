@@ -33,17 +33,27 @@ public class EditClipboardButtonsWidget
 	 */
 	public EditClipboardButtonsWidget(Runnable copyAction, Runnable pasteAction, Runnable deleteAction, String deleteTooltip)
 	{
-		copyButton = new JButton(Translation.get("iconsTool.copy"));
-		copyButton.setToolTipText(Translation.get("iconsTool.copy.tooltip", SwingHelper.getCommandKeyName()));
+		this("iconsTool", copyAction, pasteAction, deleteAction, deleteTooltip);
+	}
+
+	/**
+	 * Same as the four-argument constructor, but reads the Copy/Paste/Delete labels and tooltips from {@code translationKeyPrefix.copy},
+	 * {@code .copy.tooltip}, {@code .paste}, {@code .paste.tooltip}, and {@code .delete}. Tools whose selections are not icons pass their own
+	 * prefix so the tooltips describe what is actually being copied.
+	 */
+	public EditClipboardButtonsWidget(String translationKeyPrefix, Runnable copyAction, Runnable pasteAction, Runnable deleteAction, String deleteTooltip)
+	{
+		copyButton = new JButton(Translation.get(translationKeyPrefix + ".copy"));
+		copyButton.setToolTipText(Translation.get(translationKeyPrefix + ".copy.tooltip", SwingHelper.getCommandKeyName()));
 		SwingHelper.bindButtonShortcut(copyButton, KeyStroke.getKeyStroke(KeyEvent.VK_C, SwingHelper.getMenuShortcutKeyMask()), "copyAction");
 		copyButton.addActionListener(e -> copyAction.run());
 
-		pasteButton = new JButton(Translation.get("iconsTool.paste"));
-		pasteButton.setToolTipText(Translation.get("iconsTool.paste.tooltip", SwingHelper.getCommandKeyName()));
+		pasteButton = new JButton(Translation.get(translationKeyPrefix + ".paste"));
+		pasteButton.setToolTipText(Translation.get(translationKeyPrefix + ".paste.tooltip", SwingHelper.getCommandKeyName()));
 		SwingHelper.bindButtonShortcut(pasteButton, KeyStroke.getKeyStroke(KeyEvent.VK_V, SwingHelper.getMenuShortcutKeyMask()), "pasteAction");
 		pasteButton.addActionListener(e -> pasteAction.run());
 
-		deleteButton = new JButton(Translation.get("iconsTool.delete"));
+		deleteButton = new JButton(Translation.get(translationKeyPrefix + ".delete"));
 		deleteButton.setToolTipText(deleteTooltip);
 		// Bind Backspace as well as Delete: the key labeled "delete" sends Backspace on most Mac keyboards.
 		SwingHelper.bindButtonShortcut(deleteButton, "deleteAction", KeyStroke.getKeyStroke("DELETE"), KeyStroke.getKeyStroke("BACK_SPACE"));
